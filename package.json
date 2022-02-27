@@ -2,7 +2,11 @@
   "name": "zwapper",
   "version": "1.0.0",
   "description": "Zwapper protocol",
-  "author": "kevin.andres@epitech.eu",
+  "homepage": "https://github.com/Draym/zwapper-evm",
+  "author": {
+    "name": "Kevin Andres",
+    "email": "kevin.andres@epitech.eu"
+  },
   "dependencies": {
     "@openzeppelin/contracts": "^4.4.0",
     "@truffle/hdwallet-provider": "^1.6.0",
