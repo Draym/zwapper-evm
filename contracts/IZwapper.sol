@@ -88,7 +88,7 @@ interface IZwapper {
      * @dev Create a Zwap for the `caller`, another user have to join the Zwap before any new functionality become available.
      * Set the `zwap` as 'CREATED'.
      *
-     * Returns the `zwap` address.
+     * Returns the `zwap` identifier.
      */
     function createZwap() external returns (uint256 zwap);
 
