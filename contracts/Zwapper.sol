@@ -3,6 +3,7 @@ pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "./IZwapper.sol";
@@ -59,47 +60,17 @@ contract Zwapper is IZwapper {
     /**
      * @dev See {IZwapper-validateExchange}.
      */
-    function submitToZwap(uint256 zwapId, ERC20Token[] calldata coins, ERC721Token[] calldata tokens) external override onlyParticipant(zwapId) isState(zwapId, ZwapState.CREATED) {
+    function submitToZwap(uint256 zwapId, Token[] calldata tokens) external override onlyParticipant(zwapId) isState(zwapId, ZwapState.CREATED) {
         require(zwaps[zwapId].userB != address(0), "Missing participant in given Zwap.");
 
         if (msg.sender == zwaps[zwapId].userA) {
-            for (uint256 i = 0; i < zwaps[zwapId].userA_coins_total; i++) {
-                require(
-                    IERC20(zwaps[zwapId].userA_coins[i].origin).balanceOf(msg.sender) >= zwaps[zwapId].userA_coins[i].amount,
-                    "you do not hold enough of the submitted coins."
-                );
-            }
-            for (uint256 i = 0; i < zwaps[zwapId].userA_tokens_total; i++) {
-                require(
-                    IERC721(zwaps[zwapId].userA_tokens[i].origin).ownerOf(zwaps[zwapId].userA_tokens[i].token) == msg.sender,
-                    "you are not the owner the submitted token."
-                );
-            }
-            for (uint256 i = 0; i < coins.length; i++) {
-                zwaps[zwapId].userA_coins[i] = coins[i];
-            }
-            zwaps[zwapId].userA_coins_total = coins.length;
+            _verifyTokenOwnership(tokens);
             for (uint256 i = 0; i < tokens.length; i++) {
                 zwaps[zwapId].userA_tokens[i] = tokens[i];
             }
             zwaps[zwapId].userA_tokens_total = tokens.length;
         } else {
-            for (uint256 i = 0; i < zwaps[zwapId].userB_coins_total; i++) {
-                require(
-                    IERC20(zwaps[zwapId].userB_coins[i].origin).balanceOf(msg.sender) >= zwaps[zwapId].userB_coins[i].amount,
-                    "you do not hold enough of the submitted coins."
-                );
-            }
-            for (uint256 i = 0; i < zwaps[zwapId].userB_tokens_total; i++) {
-                require(
-                    IERC721(zwaps[zwapId].userB_tokens[i].origin).ownerOf(zwaps[zwapId].userB_tokens[i].token) == msg.sender,
-                    "you are not the owner the submitted token."
-                );
-            }
-            for (uint256 i = 0; i < coins.length; i++) {
-                zwaps[zwapId].userB_coins[i] = coins[i];
-            }
-            zwaps[zwapId].userB_coins_total = coins.length;
+            _verifyTokenOwnership(tokens);
             for (uint256 i = 0; i < tokens.length; i++) {
                 zwaps[zwapId].userB_tokens[i] = tokens[i];
             }
@@ -122,19 +93,9 @@ contract Zwapper is IZwapper {
             zwaps[zwapId].state = ZwapState.LOCKED;
         }
         if (msg.sender == zwaps[zwapId].userA) {
-            for (uint256 i = 0; i < zwaps[zwapId].userA_coins_total; i++) {
-                IERC20(zwaps[zwapId].userA_coins[i].origin).transferFrom(msg.sender, address(this), zwaps[zwapId].userA_coins[i].amount);
-            }
-            for (uint256 i = 0; i < zwaps[zwapId].userA_tokens_total; i++) {
-                IERC721(zwaps[zwapId].userA_tokens[i].origin).safeTransferFrom(msg.sender, address(this), zwaps[zwapId].userA_tokens[i].token);
-            }
+            _transferToSelf(zwaps[zwapId].userA_tokens, zwaps[zwapId].userA_tokens_total);
         } else {
-            for (uint256 i = 0; i < zwaps[zwapId].userB_coins_total; i++) {
-                IERC20(zwaps[zwapId].userB_coins[i].origin).transferFrom(msg.sender, address(this), zwaps[zwapId].userB_coins[i].amount);
-            }
-            for (uint256 i = 0; i < zwaps[zwapId].userB_tokens_total; i++) {
-                IERC721(zwaps[zwapId].userB_tokens[i].origin).safeTransferFrom(msg.sender, address(this), zwaps[zwapId].userB_tokens[i].token);
-            }
+            _transferToSelf(zwaps[zwapId].userB_tokens, zwaps[zwapId].userB_tokens_total);
         }
         emit ZwapLocked({zwapId : zwapId, from : msg.sender});
     }
@@ -155,19 +116,9 @@ contract Zwapper is IZwapper {
             zwaps[zwapId].state = ZwapState.COMPLETED;
         }
         if (msg.sender == zwaps[zwapId].userA) {
-            for (uint256 i = 0; i < zwaps[zwapId].userB_coins_total; i++) {
-                IERC20(zwaps[zwapId].userB_coins[i].origin).transferFrom(address(this), zwaps[zwapId].userA, zwaps[zwapId].userB_coins[i].amount);
-            }
-            for (uint256 i = 0; i < zwaps[zwapId].userB_tokens_total; i++) {
-                IERC721(zwaps[zwapId].userB_tokens[i].origin).safeTransferFrom(address(this), zwaps[zwapId].userA, zwaps[zwapId].userB_tokens[i].token);
-            }
+            _transferToUser(zwaps[zwapId].userB_tokens, zwaps[zwapId].userB_tokens_total, zwaps[zwapId].userA);
         } else {
-            for (uint256 i = 0; i < zwaps[zwapId].userA_coins_total; i++) {
-                IERC20(zwaps[zwapId].userA_coins[i].origin).transferFrom(address(this), zwaps[zwapId].userB, zwaps[zwapId].userA_coins[i].amount);
-            }
-            for (uint256 i = 0; i < zwaps[zwapId].userA_tokens_total; i++) {
-                IERC721(zwaps[zwapId].userA_tokens[i].origin).safeTransferFrom(address(this), zwaps[zwapId].userB, zwaps[zwapId].userA_tokens[i].token);
-            }
+            _transferToUser(zwaps[zwapId].userA_tokens, zwaps[zwapId].userA_tokens_total, zwaps[zwapId].userB);
         }
         emit ZwapWithdrawn({zwapId : zwapId, from : msg.sender});
     }
@@ -177,41 +128,100 @@ contract Zwapper is IZwapper {
      */
     function abortExchange(uint256 zwapId) external override onlyParticipant(zwapId) isState(zwapId, ZwapState.LOCKED) {
         zwaps[zwapId].state = ZwapState.CLOSED;
-        if (msg.sender == zwaps[zwapId].userA) {
-            for (uint256 i = 0; i < zwaps[zwapId].userA_coins_total; i++) {
-                IERC20(zwaps[zwapId].userA_coins[i].origin).transferFrom(address(this), zwaps[zwapId].userA, zwaps[zwapId].userA_coins[i].amount);
-            }
-            for (uint256 i = 0; i < zwaps[zwapId].userA_tokens_total; i++) {
-                IERC721(zwaps[zwapId].userA_tokens[i].origin).safeTransferFrom(address(this), zwaps[zwapId].userA, zwaps[zwapId].userA_tokens[i].token);
-            }
-        } else {
-            for (uint256 i = 0; i < zwaps[zwapId].userB_coins_total; i++) {
-                IERC20(zwaps[zwapId].userB_coins[i].origin).transferFrom(address(this), zwaps[zwapId].userB, zwaps[zwapId].userB_coins[i].amount);
-            }
-            for (uint256 i = 0; i < zwaps[zwapId].userB_tokens_total; i++) {
-                IERC721(zwaps[zwapId].userB_tokens[i].origin).safeTransferFrom(address(this), zwaps[zwapId].userB, zwaps[zwapId].userB_tokens[i].token);
+        _transferToUser(zwaps[zwapId].userA_tokens, zwaps[zwapId].userA_tokens_total, zwaps[zwapId].userA);
+        _transferToUser(zwaps[zwapId].userB_tokens, zwaps[zwapId].userB_tokens_total, zwaps[zwapId].userB);
+        emit ZwapAborted({zwapId : zwapId, from : msg.sender});
+    }
+
+    /**
+     * @dev Verify ownership of tokens of the caller.
+     */
+    function _verifyTokenOwnership(Token[] memory tokens) internal view {
+        for (uint256 i = 0; i < tokens.length; i++) {
+            if (tokens[i].tokenType == TokenType.ERC20) {
+                require(
+                    IERC20(tokens[i].origin).balanceOf(msg.sender) >= tokens[i].amount,
+                    "You do not hold enough of the submitted ERC20 token."
+                );
+            } else if (tokens[i].tokenType == TokenType.ERC712) {
+                require(
+                    IERC721(tokens[i].origin).ownerOf(tokens[i].tokenId) == msg.sender,
+                    "You are not the owner of the submitted ERC721 token."
+                );
+            } else if (tokens[i].tokenType == TokenType.ERC1155) {
+                require(
+                    IERC1155(tokens[i].origin).balanceOf(msg.sender, tokens[i].tokenId) >= tokens[i].amount,
+                    "You do not hold enough of the submitted ERC1155 token."
+                );
+            } else {
+                revert("Unknown provided Token.");
             }
         }
-        emit ZwapAborted({zwapId : zwapId, from : msg.sender});
+    }
+
+    /**
+     * @dev Transfer tokens from this contract to a receiver.
+     */
+    function _transferToUser(mapping(uint256 => Token) memory tokens, uint256 total, address to) internal {
+        for (uint256 i = 0; i < total; i++) {
+            if (tokens[i].tokenType == TokenType.ERC20) {
+                IERC20(tokens[i].origin).transferFrom(address(this), to, tokens[i].amount);
+            } else if (tokens[i].tokenType == TokenType.ERC712) {
+                IERC721(tokens[i].origin).safeTransferFrom(address(this), to, tokens[i].tokenId);
+            } else if (tokens[i].tokenType == TokenType.ERC1155) {
+                IERC1155(tokens[i].origin).safeTransferFrom(address(this), to, tokens[i].tokenId, tokens[i].amount, "0x");
+            } else {
+                revert("Unknown provided Token.");
+            }
+        }
+    }
+
+    /**
+     * @dev Transfer tokens from the caller to this contract.
+     */
+    function _transferToSelf(mapping(uint256 => Token) memory tokens, uint256 total) internal {
+        for (uint256 i = 0; i < total; i++) {
+            if (tokens[i].tokenType == TokenType.ERC20) {
+                IERC20(tokens[i].origin).approve(address(this), tokens[i].amount);
+                IERC20(tokens[i].origin).transferFrom(msg.sender, address(this), tokens[i].amount);
+            } else if (tokens[i].tokenType == TokenType.ERC712) {
+                IERC721(tokens[i].origin).approve(address(this), tokens[i].tokenId);
+                IERC721(tokens[i].origin).safeTransferFrom(msg.sender, address(this), tokens[i].tokenId);
+            } else if (tokens[i].tokenType == TokenType.ERC1155) {
+                IERC1155(tokens[i].origin).setApprovalForAll(address(this), true);
+                IERC1155(tokens[i].origin).safeTransferFrom(msg.sender, address(this), tokens[i].tokenId, tokens[i].amount, "0x");
+            } else {
+                revert("Unknown provided Token.");
+            }
+        }
+    }
+
+    function transferFromSender(Transfer[] calldata batch) external override {
+        for (uint256 i = 0; i < batch.length; i++) {
+            if (batch[i].token.tokenType == TokenType.ERC20) {
+                IERC20(batch[i].token.origin).approve(address(this), batch[i].token.amount);
+                IERC20(batch[i].token.origin).transferFrom(msg.sender, batch[i].to, batch[i].token.amount);
+            } else if (batch[i].token.tokenType == TokenType.ERC712) {
+                IERC721(batch[i].token.origin).approve(address(this), batch[i].token.tokenId);
+                IERC721(batch[i].token.origin).safeTransferFrom(msg.sender, batch[i].to, batch[i].token.tokenId);
+            } else if (batch[i].token.tokenType == TokenType.ERC1155) {
+                IERC1155(batch[i].token.origin).setApprovalForAll(address(this), true);
+                IERC1155(batch[i].token.origin).safeTransferFrom(msg.sender, batch[i].to, batch[i].token.tokenId, batch[i].token.amount, "0x");
+            } else {
+                revert("Unknown provided Token.");
+            }
+        }
     }
 
     /**
      * @dev See {IZwapper-getZwap}.
      */
     function getZwap(uint256 zwapId) external override view returns (ZwapDTO memory){
-        ERC20Token[] memory userA_coins = new ERC20Token[](zwaps[zwapId].userA_coins_total);
-        ERC721Token[] memory userA_tokens = new ERC721Token[](zwaps[zwapId].userA_tokens_total);
-        ERC20Token[] memory userB_coins = new ERC20Token[](zwaps[zwapId].userB_coins_total);
-        ERC721Token[] memory userB_tokens = new ERC721Token[](zwaps[zwapId].userB_tokens_total);
+        Token[] memory userA_tokens = new Token[](zwaps[zwapId].userA_tokens_total);
+        Token[] memory userB_tokens = new Token[](zwaps[zwapId].userB_tokens_total);
 
-        for (uint256 i = 0; i < zwaps[zwapId].userA_coins_total; i++) {
-            userA_coins[i] = zwaps[zwapId].userA_coins[i];
-        }
         for (uint256 i = 0; i < zwaps[zwapId].userA_tokens_total; i++) {
             userA_tokens[i] = zwaps[zwapId].userA_tokens[i];
-        }
-        for (uint256 i = 0; i < zwaps[zwapId].userB_coins_total; i++) {
-            userB_coins[i] = zwaps[zwapId].userB_coins[i];
         }
         for (uint256 i = 0; i < zwaps[zwapId].userB_tokens_total; i++) {
             userB_tokens[i] = zwaps[zwapId].userB_tokens[i];
@@ -225,9 +235,7 @@ contract Zwapper is IZwapper {
         userB_locked : zwaps[zwapId].userB_locked,
         userA_withdraw : zwaps[zwapId].userA_withdraw,
         userB_withdraw : zwaps[zwapId].userB_withdraw,
-        userA_coins : userA_coins,
         userA_tokens : userA_tokens,
-        userB_coins : userB_coins,
         userB_tokens : userB_tokens
         });
     }

@@ -42,14 +42,17 @@ interface IZwapper {
         CLOSED
     }
 
-    struct ERC20Token {
-        address origin;
-        uint256 amount;
+    enum TokenType {
+        ERC20,
+        ERC721,
+        ERC1155
     }
 
-    struct ERC721Token {
+    struct Token {
+        TokenType tokenType;
         address origin;
-        uint256 token;
+        uint256 tokenId;
+        uint256 amount;
     }
 
     struct Zwap {
@@ -60,13 +63,9 @@ interface IZwapper {
         bool userB_locked;
         bool userA_withdraw;
         bool userB_withdraw;
-        mapping(uint256 => ERC20Token) userA_coins;
-        uint256 userA_coins_total;
-        mapping(uint256 => ERC721Token) userA_tokens;
+        mapping(uint256 => Token) userA_tokens;
         uint256 userA_tokens_total;
-        mapping(uint256 => ERC20Token) userB_coins;
-        uint256 userB_coins_total;
-        mapping(uint256 => ERC721Token) userB_tokens;
+        mapping(uint256 => Token) userB_tokens;
         uint256 userB_tokens_total;
     }
 
@@ -78,10 +77,8 @@ interface IZwapper {
         bool userB_locked;
         bool userA_withdraw;
         bool userB_withdraw;
-        ERC20Token[] userA_coins;
-        ERC721Token[] userA_tokens;
-        ERC20Token[] userB_coins;
-        ERC721Token[] userB_tokens;
+        Token[] userA_tokens;
+        Token[] userB_tokens;
     }
 
     /**
@@ -114,7 +111,7 @@ interface IZwapper {
      *
      * Emits a {ZwapSubmitted} event.
      */
-    function submitToZwap(uint256 zwapId, ERC20Token[] calldata coins, ERC721Token[] calldata tokens) external;
+    function submitToZwap(uint256 zwapId, Token[] calldata tokens) external;
 
     /**
      * @dev  Lock the Zwap and transfer the ownership of the goods to the Zwapper contract.
@@ -163,4 +160,17 @@ interface IZwapper {
      * - `caller` must be part of the `zwap`.
      */
     function getZwap(uint256 zwapId) external view returns (ZwapDTO memory);
+
+    /**
+     * @dev Transfer a token from sender to a receiver address.
+     *
+     * Requirements:
+     * - `caller` must own the token he transfers.
+     */
+    function transferFromSender(Transfer[] calldata batch);
+
+    struct Transfer {
+        address to;
+        Token token;
+    }
 }
